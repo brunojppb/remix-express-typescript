@@ -1,11 +1,15 @@
 {
   "private": true,
   "sideEffects": false,
-  "type": "module",
+  "name": "remix-express-starter",
+  "author": {
+    "name": "Bruno Paulino",
+    "url": "https://bpaulino.com"
+  },
   "scripts": {
     "build": "remix build",
-    "dev": "remix dev --no-restart -c \"node server.js\"",
-    "start": "cross-env NODE_ENV=production node ./server.js",
+    "dev": "remix dev -c 'tsx ./server/dev.ts'",
+    "start": "cross-env NODE_ENV=production node ./build/index.js",
     "typecheck": "tsc"
   },
   "dependencies": {
@@ -31,9 +35,13 @@
     "@types/react-dom": "^18.0.11",
     "chokidar": "^3.5.3",
     "eslint": "^8.38.0",
-    "typescript": "^5.0.4"
+    "typescript": "^5.0.4",
+    "tsx": "3.12.7"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18"
+  },
+  "volta": {
+    "node": "20.4.0"
   }
 }

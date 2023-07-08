@@ -30,7 +30,7 @@ COPY package.json package-lock.json ./
 # Install only production dependencies to keep our Docker image small
 RUN npm install --omit=dev
 
-RUN ls -la
+USER nobody
 
 # Start from the Remix build which already includes our Express server
 CMD ["node", "./build/index.js"]

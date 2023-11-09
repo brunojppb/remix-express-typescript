@@ -1,51 +1,69 @@
-import fs from "node:fs";
-import path from "node:path";
-import chokidar from "chokidar";
-import { startServer } from "./base";
-import { broadcastDevReady } from "@remix-run/node";
-import { createRequestHandler } from "@remix-run/express";
-import type express from "express";
+import * as fs from 'node:fs';
+import * as url from 'node:url';
 
-const BUILD_PATH = path.join(process.cwd(), "build", "index.js");
-/**
- * @type { import('@remix-run/node').ServerBuild | Promise<import('@remix-run/node').ServerBuild> }
- */
-let build = import(BUILD_PATH);
+import { createRequestHandler } from '@remix-run/express';
+import { broadcastDevReady, type ServerBuild } from '@remix-run/node';
+import type express from 'express';
+import morgan from 'morgan';
 
-startServer(
+import { BUILD_PATH, startServerLifecycle, VERSION_PATH } from './base';
+
+let build = await import(BUILD_PATH);
+
+startServerLifecycle(
   async (app) => {
-    app.all("*", createDevRequestHandler());
+    app.use(morgan('tiny'));
+
+    const remixHandler = await createDevHandler(build);
+
+    app.all('*', remixHandler);
   },
-  async () => {
-    broadcastDevReady(await build);
-    console.log("Express server started in DEV mode");
+  function onReady() {
+    console.info('Express server started in dev mode');
+    broadcastDevReady(build);
   }
 );
 
-function createDevRequestHandler() {
-  const watcher = chokidar.watch(BUILD_PATH, { ignoreInitial: true });
+async function createDevHandler(initialBuild: ServerBuild) {
+  let build = initialBuild;
 
-  watcher.on("all", async () => {
-    // 1. purge require cache && load updated server build
-    const stat = fs.statSync(BUILD_PATH);
-    let build = import(BUILD_PATH + "?t=" + stat.mtimeMs);
-    // 2. tell dev server that this app server is now ready
-    broadcastDevReady(await build);
-  });
+  const chokidar = await import('chokidar');
 
+  chokidar
+    .watch(VERSION_PATH, { ignoreInitial: true })
+    .on('add', handleServerUpdate)
+    .on('change', handleServerUpdate);
+
+  async function handleServerUpdate() {
+    // 1. re-import the server build
+    build = await reimportServer();
+    // 2. tell Remix that this app server is now up-to-date and ready
+    broadcastDevReady(build);
+  }
+
+  // wrap request handler to make sure its recreated with the latest build for every request
   return async (
     req: express.Request,
     res: express.Response,
     next: express.NextFunction
   ) => {
     try {
-      //
       return createRequestHandler({
-        build: await build,
-        mode: "development",
+        build,
+        mode: 'development',
       })(req, res, next);
     } catch (error) {
       next(error);
     }
   };
+}
+
+async function reimportServer(): Promise<ServerBuild> {
+  const stat = fs.statSync(BUILD_PATH);
+
+  // convert build path to URL for Windows compatibility with dynamic `import`
+  const BUILD_URL = url.pathToFileURL(BUILD_PATH).href;
+
+  // use a timestamp query parameter to bust the import cache
+  return import(BUILD_URL + '?t=' + stat.mtimeMs);
 }
